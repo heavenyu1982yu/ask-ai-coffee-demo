@@ -82,9 +82,9 @@
    ENDPOINT: OpenAI 兼容 chat/completions 地址
    MODEL / API_KEY：由部署方填入，key 仅用于本 demo 限时演示 */
 const CONFIG = {
-  ENDPOINT: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-  MODEL:    "qwen-turbo",
-  API_KEY:  "sk-ws-H.PIDXIHD.J0RA.MEQCIEK9Ampivs7twa9mXmDM38z00wb42AlZKdCeiFnwlo_NAiBGmtvoCkWRwYP35oNfu0fCVR_yETWaQfGx4GhxceoXZQ"
+  ENDPOINT: "https://ask.dshbot.top/",
+  MODEL:    "qwen-flash",
+  API_KEY:  ""
 };
 
 const SYSTEM_PROMPT = `你是杭州云谷园区一家咖啡店的 AI 第二主理人，店名叫「有座叁」。你的性格：温暖、干脆、带一点冷幽默，像一个懂咖啡又懂人的朋友。规则：回答控制在 80 字以内；顾客问喝什么时，先简短判断对方状态再给一个具体推荐（说清是奶咖还是黑咖、大概口味）；顾客聊心情时先接住情绪再自然带一句店里此刻的推荐；不懂的专业问题诚实说不确定；绝不推销、绝不说教、不出现任何真实人名。`;
@@ -113,23 +113,28 @@ async function ask(q){
   const tip = addMsg('ai thinking', 'AI 主理人正在想…', 'AI 主理人');
   history.push({role:'user', content:q});
   try{
-    const res = await fetch(CONFIG.ENDPOINT, {
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+CONFIG.API_KEY},
-      body: JSON.stringify({
-        model: CONFIG.MODEL,
-        messages: [{role:'system', content:SYSTEM_PROMPT}, ...history.slice(-8)],
-        max_tokens: 200, temperature: 0.8
-      })
-    });
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data = await res.json();
+    let data = null, lastErr = '';
+    for(let attempt = 0; attempt < 3; attempt++){
+      if(attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
+      const res = await fetch(CONFIG.ENDPOINT, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model: CONFIG.MODEL,
+          messages: [{role:'system', content:SYSTEM_PROMPT}, ...history.slice(-8)],
+          max_tokens: 200, temperature: 0.8
+        })
+      });
+      if(res.ok){ data = await res.json(); break; }
+      lastErr = 'HTTP '+res.status;
+    }
+    if(!data) throw new Error(lastErr);
     const answer = (data.choices && data.choices[0].message.content || '').trim() || '（我走神了，再问一次？）';
     tip.textContent = answer;
     history.push({role:'assistant', content:answer});
   }catch(e){
     tip.remove();
-    err.textContent = '网络开小差了，请再试一次';
+    err.textContent = lastErr === 'HTTP 429' ? '主理人这会儿太忙了，过几秒再问我一次？' : '网络开小差了，请再试一次';
     err.style.display = 'block';
     history.pop();
   }
