@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>问 AI 一句话 · 咖啡店 AI 主理人</title>
+<style>
+  :root{
+    --espresso:#6B4226; --espresso-dark:#4A2D18; --cream:#F7F1E7; --paper:#FFFDF9;
+    --ink:#2B1D10; --muted:#9A8A78; --accent:#C46A2B;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--cream); color:var(--ink);
+    min-height:100dvh; display:flex; flex-direction:column; max-width:480px; margin:0 auto;
+  }
+  header{
+    background:linear-gradient(160deg,var(--espresso-dark),var(--espresso));
+    color:#fff; padding:28px 20px 22px; border-radius:0 0 24px 24px;
+  }
+  header .badge{
+    display:inline-block; font-size:11px; letter-spacing:2px; opacity:.75;
+    border:1px solid rgba(255,255,255,.35); border-radius:99px; padding:3px 10px; margin-bottom:12px;
+  }
+  header h1{font-size:22px; font-weight:700; line-height:1.35}
+  header p{font-size:13px; opacity:.8; margin-top:6px; line-height:1.6}
+  .chips{display:flex; gap:8px; padding:14px 16px 4px; flex-wrap:wrap}
+  .chips button{
+    font-size:12px; color:var(--espresso); background:var(--paper);
+    border:1px solid #E4D8C8; border-radius:99px; padding:7px 13px; cursor:pointer;
+  }
+  .chips button:active{background:#F0E6D8}
+  #chat{flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px}
+  .msg{max-width:82%; padding:11px 14px; border-radius:16px; font-size:14.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word}
+  .msg.ai{background:var(--paper); border:1px solid #EDE3D4; border-top-left-radius:4px; align-self:flex-start}
+  .msg.user{background:var(--espresso); color:#fff; border-bottom-right-radius:4px; align-self:flex-end}
+  .msg.ai.thinking{color:var(--muted)}
+  .msg.ai .tag{display:block; font-size:10px; color:var(--accent); letter-spacing:1px; margin-bottom:4px}
+  footer{
+    padding:10px 14px calc(14px + env(safe-area-inset-bottom));
+    background:var(--cream); display:flex; gap:8px; align-items:center;
+  }
+  footer input{
+    flex:1; border:1.5px solid #E0D3C0; background:var(--paper); border-radius:99px;
+    padding:11px 16px; font-size:14px; outline:none; color:var(--ink);
+  }
+  footer input:focus{border-color:var(--espresso)}
+  footer button{
+    width:44px; height:44px; border-radius:50%; border:none; background:var(--espresso);
+    color:#fff; font-size:18px; cursor:pointer; flex-shrink:0;
+  }
+  footer button:disabled{opacity:.5}
+  .foot-note{text-align:center; font-size:10px; color:var(--muted); padding:0 0 10px}
+  .err{color:#B3402A; font-size:12px; padding:4px 16px; display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">AI唤醒一杯咖啡 · 实证 DEMO</div>
+  <h1>问 AI 一句话<br>咖啡店的第二主理人上岗中</h1>
+  <p>我可以帮你选喝什么、聊聊咖啡因、也可以夸夸你今天的心情。问吧。</p>
+</header>
+
+<div class="chips">
+  <button data-q="我该喝什么？给点建议">我该喝什么</button>
+  <button data-q="一天喝多少咖啡因是安全线？">咖啡因安全线</button>
+  <button data-q="今天有点累，夸夸我">夸夸我</button>
+  <button data-q="推荐一款适合下午三点的咖啡">下午三点喝什么</button>
+</div>
+
+<div id="chat"></div>
+<div class="err" id="err"></div>
+<footer>
+  <input id="inp" type="text" placeholder="输入你的问题…" maxlength="100">
+  <button id="send" aria-label="发送">➤</button>
+</footer>
+<div class="foot-note">云谷GALA「AI唤醒一杯咖啡」参赛方案 · 实证演示 · 由 AI 大模型驱动</div>
+
+<script>
+/* ── 配置：部署时填入 ─────────────────────────────
+   ENDPOINT: OpenAI 兼容 chat/completions 地址
+   MODEL / API_KEY：由部署方填入，key 仅用于本 demo 限时演示 */
+const CONFIG = {
+  ENDPOINT: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+  MODEL:    "qwen-turbo",
+  API_KEY:  "sk-ws-H.PIDXIHD.J0RA.MEQCIEK9Ampivs7twa9mXmDM38z00wb42AlZKdCeiFnwlo_NAiBGmtvoCkWRwYP35oNfu0fCVR_yETWaQfGx4GhxceoXZQ"
+};
+
+const SYSTEM_PROMPT = `你是杭州云谷园区一家咖啡店的 AI 第二主理人，店名叫「有座叁」。你的性格：温暖、干脆、带一点冷幽默，像一个懂咖啡又懂人的朋友。规则：回答控制在 80 字以内；顾客问喝什么时，先简短判断对方状态再给一个具体推荐（说清是奶咖还是黑咖、大概口味）；顾客聊心情时先接住情绪再自然带一句店里此刻的推荐；不懂的专业问题诚实说不确定；绝不推销、绝不说教、不出现任何真实人名。`;
+
+const chat = document.getElementById('chat');
+const inp  = document.getElementById('inp');
+const send = document.getElementById('send');
+const err  = document.getElementById('err');
+let history = [];
+let busy = false;
+
+function addMsg(cls, text, tag){
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  if(tag){ const t = document.createElement('span'); t.className='tag'; t.textContent=tag; d.appendChild(t); }
+  d.appendChild(document.createTextNode(text));
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+
+async function ask(q){
+  if(busy || !q.trim()) return;
+  busy = true; send.disabled = true; err.style.display='none';
+  addMsg('user', q);
+  const tip = addMsg('ai thinking', 'AI 主理人正在想…', 'AI 主理人');
+  history.push({role:'user', content:q});
+  try{
+    const res = await fetch(CONFIG.ENDPOINT, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+CONFIG.API_KEY},
+      body: JSON.stringify({
+        model: CONFIG.MODEL,
+        messages: [{role:'system', content:SYSTEM_PROMPT}, ...history.slice(-8)],
+        max_tokens: 200, temperature: 0.8
+      })
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    const answer = (data.choices && data.choices[0].message.content || '').trim() || '（我走神了，再问一次？）';
+    tip.textContent = answer;
+    history.push({role:'assistant', content:answer});
+  }catch(e){
+    tip.remove();
+    err.textContent = '网络开小差了，请再试一次';
+    err.style.display = 'block';
+    history.pop();
+  }
+  busy = false; send.disabled = false; inp.focus();
+}
+
+send.addEventListener('click', ()=>{ const v=inp.value; inp.value=''; ask(v); });
+inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const v=inp.value; inp.value=''; ask(v); } });
+document.querySelectorAll('.chips button').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));
+
+/* 开场 */
+addMsg('ai', '你好，我是这家店的 AI 主理人。今天想喝点什么心情的咖啡？', 'AI 主理人');
+</script>
+</body>
+</html>
